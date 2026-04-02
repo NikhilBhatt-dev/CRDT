@@ -18,6 +18,12 @@ const io =  new Server(httpServer, {
 })
 
 
+
+const ySocketIO = new YSocketIO(io)
+ySocketIO.initialize()
+
+
+
 app.get("/", (req, res) => {
     res.status(200).json({
         message:"hello",
