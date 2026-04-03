@@ -17,6 +17,9 @@ function App() {
   })
 
   const [users, setUsers] = useState([])
+  const socketServerUrl = window.location.port === '3000'
+    ? window.location.origin
+    : 'http://localhost:3000'
 
   const ydoc = useMemo(() => new Y.Doc(), [])
   const yText = useMemo(() => ydoc.getText("monaco"), [ydoc])
@@ -25,7 +28,7 @@ function App() {
     editorRef.current = editor
 
     providerRef.current = new SocketIOProvider(
-      'http://localhost:3000',
+      socketServerUrl,
       'monaco',
       ydoc,
       { autoConnect: true }
@@ -53,8 +56,6 @@ function App() {
 
     const provider = providerRef.current
 
-    provider.awareness.setLocalStateField('user', { username })
-
     const updateUsers = () => {
       const states = Array.from(provider.awareness.getStates().values())
 
@@ -65,8 +66,14 @@ function App() {
       )
     }
 
+    const syncAwareness = () => {
+      provider.awareness.setLocalStateField('user', { username })
+      updateUsers()
+    }
+
     provider.awareness.on("change", updateUsers)
-    updateUsers()
+    provider.on("sync", syncAwareness)
+    syncAwareness()
 
     const handleBeforeUnload = () => {
       provider.awareness.setLocalStateField('user', null)
@@ -76,6 +83,7 @@ function App() {
 
     return () => {
       provider.awareness.off("change", updateUsers)
+      provider.off("sync", syncAwareness)
       window.removeEventListener("beforeunload", handleBeforeUnload)
     }
 
@@ -83,15 +91,15 @@ function App() {
 
   if (!username) {
     return (
-      <main className="h-screen w-full bg-gray-900 flex gap-4 p-4 items-center">
-        <form onSubmit={handleJoin} className='flex flex-col gap-4'>
+      <main className="h-screen w-full bg-gray-900 flex items-center justify-center p-4">
+        <form onSubmit={handleJoin} className='flex flex-col items-center gap-4 w-full max-w-sm'>
           <input
             type="text"
             placeholder='enter your name'
-            className='p-2 rounded-lg bg-gray-800 text-white'
+            className='w-full p-2 rounded-lg bg-gray-800 text-white'
             name='username'
           />
-          <button className='p-2 rounded-lg bg-amber-50 text-gray-950 font-bold'>
+          <button className='w-full p-2 rounded-lg bg-amber-50 text-gray-950 font-bold'>
             join
           </button>
         </form>
