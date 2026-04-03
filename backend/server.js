@@ -12,7 +12,8 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const frontendDistPath = path.resolve(__dirname, "../frontend/vite-project/dist")
 
-app.use(express.static(frontendDistPath))
+// app.use(express.static(frontendDistPath))
+app.use(express.static("public"))
 const httpServer = createServer(app)
 
 

@@ -1,0 +1,9 @@
+
+# Build artifacts
+*.log
+*.tmp
+
+# Environment files (important)
+.env
+.env.*
+node_module
