@@ -6,4 +6,8 @@
 # Environment files (important)
 .env
 .env.*
+
+node_module
+
+.env
 node_module
