@@ -1,38 +1,117 @@
 import './App.css'
 import { Editor } from '@monaco-editor/react'
 import { MonacoBinding } from "y-monaco"
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useState, useEffect } from 'react'
 import * as Y from 'yjs'
 import { SocketIOProvider } from "y-socket.io"
 
 function App() {
 
   const editorRef = useRef(null)
+  const providerRef = useRef(null)
+  const [providerReady, setProviderReady] = useState(false)
+
+  const [username, setUsername] = useState(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    return urlParams.get("username") || ""
+  })
+
+  const [users, setUsers] = useState([])
+
   const ydoc = useMemo(() => new Y.Doc(), [])
   const yText = useMemo(() => ydoc.getText("monaco"), [ydoc])
 
   const handleMount = (editor) => {
     editorRef.current = editor
 
-    const provider = new SocketIOProvider(
+    providerRef.current = new SocketIOProvider(
       'http://localhost:3000',
       'monaco',
-      ydoc,{
-      autoConnect: true,
+      ydoc,
+      { autoConnect: true }
+    )
 
-  })
-
-    const binding = new MonacoBinding(
+    new MonacoBinding(
       yText,
-      editorRef.current.getModel(),
-      new Set([editorRef.current]),
-      provider.awareness
+      editor.getModel(),
+      new Set([editor]),
+      providerRef.current.awareness
+    )
+
+    setProviderReady(true)
+  }
+
+  const handleJoin = (e) => {
+    e.preventDefault()
+    const name = e.target.username.value
+    setUsername(name)
+    window.history.pushState({}, "", "?username=" + name)
+  }
+
+  useEffect(() => {
+    if (!username || !providerReady || !providerRef.current) return
+
+    const provider = providerRef.current
+
+    provider.awareness.setLocalStateField('user', { username })
+
+    const updateUsers = () => {
+      const states = Array.from(provider.awareness.getStates().values())
+
+      setUsers(
+        states
+          .map(state => state.user)
+          .filter(u => u?.username)
+      )
+    }
+
+    provider.awareness.on("change", updateUsers)
+    updateUsers()
+
+    const handleBeforeUnload = () => {
+      provider.awareness.setLocalStateField('user', null)
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+
+    return () => {
+      provider.awareness.off("change", updateUsers)
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+    }
+
+  }, [username, providerReady])
+
+  if (!username) {
+    return (
+      <main className="h-screen w-full bg-gray-900 flex gap-4 p-4 items-center">
+        <form onSubmit={handleJoin} className='flex flex-col gap-4'>
+          <input
+            type="text"
+            placeholder='enter your name'
+            className='p-2 rounded-lg bg-gray-800 text-white'
+            name='username'
+          />
+          <button className='p-2 rounded-lg bg-amber-50 text-gray-950 font-bold'>
+            join
+          </button>
+        </form>
+      </main>
     )
   }
 
   return (
     <main className="h-screen w-full bg-gray-900 flex gap-4 p-4">
-      <aside className='h-full w-1/4 bg-amber-50 rounded-lg'></aside>
+      <aside className='h-full w-1/4 bg-amber-50 rounded-lg p-2'>
+      <h2 className="text-2xl font-bold mb-4">Users</h2>
+
+      <ul className='p-4'>
+        {users.map((u, i) => (
+          <li key={i} className="bg-gray-800 text-white  p-2 rounded mb-2">
+            {u.username}
+          </li>
+        ))}
+        </ul>
+      </aside>
 
       <section className='w-3/4 bg-neutral-800 rounded-lg overflow-hidden'>
         <Editor
