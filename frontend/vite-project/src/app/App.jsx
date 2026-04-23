@@ -9,7 +9,8 @@ function App() {
 
   const editorRef = useRef(null)
   const providerRef = useRef(null)
-  const [providerReady, setProviderReady] = useState(false)
+  const bindingRef = useRef(null)
+  const [editorReady, setEditorReady] = useState(false)
 
   const [username, setUsername] = useState(() => {
     const urlParams = new URLSearchParams(window.location.search)
@@ -17,52 +18,63 @@ function App() {
   })
 
   const [users, setUsers] = useState([])
-  const socketServerUrl = window.location.port === '3000'
-    ? window.location.origin
-    : 'http://localhost:3000'
+  const [connectionStatus, setConnectionStatus] = useState('connecting')
+  const isLocalhost =
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+  const socketServerUrl =
+    isLocalhost && window.location.port !== '3000'
+      ? `${window.location.protocol}//${window.location.hostname}:3000`
+      : window.location.origin
 
   const ydoc = useMemo(() => new Y.Doc(), [])
   const yText = useMemo(() => ydoc.getText("monaco"), [ydoc])
 
   const handleMount = (editor) => {
     editorRef.current = editor
-
-    providerRef.current = new SocketIOProvider(
-      socketServerUrl,
-      'monaco',
-      ydoc,
-      { autoConnect: true }
-    )
-
-    new MonacoBinding(
-      yText,
-      editor.getModel(),
-      new Set([editor]),
-      providerRef.current.awareness
-    )
-
-    setProviderReady(true)
+    setEditorReady(true)
   }
 
   const handleJoin = (e) => {
     e.preventDefault()
-    const name = e.target.username.value
+    const name = e.target.username.value.trim()
+    if (!name) return
+
     setUsername(name)
     window.history.pushState({}, "", "?username=" + name)
   }
 
   useEffect(() => {
-    if (!username || !providerReady || !providerRef.current) return
+    if (!username || !editorReady || !editorRef.current) return
 
-    const provider = providerRef.current
+    const provider = new SocketIOProvider(
+      socketServerUrl,
+      'monaco',
+      ydoc,
+      { autoConnect: true }
+    )
+    const editor = editorRef.current
+
+    providerRef.current = provider
+    bindingRef.current = new MonacoBinding(
+      yText,
+      editor.getModel(),
+      new Set([editor]),
+      provider.awareness
+    )
 
     const updateUsers = () => {
       const states = Array.from(provider.awareness.getStates().values())
 
       setUsers(
-        states
-          .map(state => state.user)
-          .filter(u => u?.username)
+        Array.from(
+          new Map(
+            states
+              .map(state => state.user)
+              .filter(user => user?.username)
+              .map(user => [user.username, user])
+          ).values()
+        )
       )
     }
 
@@ -70,9 +82,21 @@ function App() {
       provider.awareness.setLocalStateField('user', { username })
       updateUsers()
     }
+    const handleStatus = ({ status }) => {
+      setConnectionStatus(status)
+
+      if (status === 'connected') {
+        syncAwareness()
+      }
+    }
+    const handleConnectionError = () => {
+      setConnectionStatus('disconnected')
+    }
 
     provider.awareness.on("change", updateUsers)
     provider.on("sync", syncAwareness)
+    provider.on("status", handleStatus)
+    provider.on("connection-error", handleConnectionError)
     syncAwareness()
 
     const handleBeforeUnload = () => {
@@ -84,10 +108,26 @@ function App() {
     return () => {
       provider.awareness.off("change", updateUsers)
       provider.off("sync", syncAwareness)
+      provider.off("status", handleStatus)
+      provider.off("connection-error", handleConnectionError)
+      provider.awareness.setLocalStateField('user', null)
+      bindingRef.current?.destroy()
+      bindingRef.current = null
+      provider.disconnect()
+      provider.destroy()
+      providerRef.current = null
+      setConnectionStatus('disconnected')
+      setUsers([])
       window.removeEventListener("beforeunload", handleBeforeUnload)
     }
 
-  }, [username, providerReady])
+  }, [editorReady, socketServerUrl, username, ydoc, yText])
+
+  useEffect(() => {
+    return () => {
+      ydoc.destroy()
+    }
+  }, [ydoc])
 
   if (!username) {
     return (
@@ -111,6 +151,14 @@ function App() {
     <main className="h-screen w-full bg-gray-900 flex gap-4 p-4">
       <aside className='h-full w-1/4 bg-amber-50 rounded-lg p-2'>
       <h2 className="text-2xl font-bold mb-4">Users</h2>
+      <p className='mb-4 rounded bg-gray-900 px-3 py-2 text-sm text-white'>
+        Status: {connectionStatus}
+      </p>
+      {connectionStatus !== 'connected' && (
+        <p className='mb-4 rounded bg-red-100 px-3 py-2 text-sm text-red-900'>
+          Collaboration server not connected. Make sure the backend is running on port 3000.
+        </p>
+      )}
 
       <ul className='p-4'>
         {users.map((u, i) => (
