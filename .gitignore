@@ -11,3 +11,9 @@ node_module
 
 .env
 node_module
+
+~$cker-aws-Interview-Guide
+Docker-aws-Interview-Guide
+generate_interview_doc
+*.docx
+*.py

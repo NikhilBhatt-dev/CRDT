@@ -4,6 +4,7 @@ import { createServer } from 'http'
 import {YSocketIO} from "y-socket.io/dist/server"
 import path from 'path'
 import { fileURLToPath } from 'url'
+import fs from 'fs'
 
 
 
@@ -11,6 +12,11 @@ const app = express()
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const frontendDistPath = path.resolve(__dirname, "../frontend/vite-project/dist")
+const publicPath = path.resolve(__dirname, "public")
+const indexHtmlPath = fs.existsSync(path.join(publicPath, "index.html"))
+    ? path.join(publicPath, "index.html")
+    : path.join(frontendDistPath, "index.html")
+const PORT = process.env.PORT || 3000
 
 // app.use(express.static(frontendDistPath))
 app.use(express.static("public"))
@@ -41,10 +47,10 @@ app.get('/health', (req,res) => {
 })
 
 app.use((req, res) => {
-    res.sendFile(path.join(frontendDistPath, "index.html"))
+    res.sendFile(indexHtmlPath)
 })
 
 
-httpServer.listen(3000, () => {
-    console.log('server is running on port 3000')
+httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`server is running on port ${PORT}`)
 })
